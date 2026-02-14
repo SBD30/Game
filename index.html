@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Love Mario Final Romantic</title>
+<style>
+body{margin:0;overflow:hidden;background:pink;}
+canvas{display:block;margin:auto;}
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+canvas.width=1200;
+canvas.height=600;
+
+/* ================= LOAD IMAGES ================= */
+function load(src){let i=new Image();i.src=src;return i;}
+const bgImg=load("background.avif");
+const playerImg=load("Player.png");
+const birdImg=load("Bird.png");
+const bugImg=load("bug.png");
+
+/* ================= INPUT ================= */
+let keys={};
+document.addEventListener("keydown",e=>keys[e.code]=true);
+document.addEventListener("keyup",e=>keys[e.code]=false);
+
+/* ================= PLAYER ================= */
+const player={
+x:100,y:450,width:60,height:80,
+dx:0,dy:0,
+speed:6,gravity:0.8,jump:-15,
+grounded:false
+};
+
+let worldOffset=0;
+let coinCount=0;
+let levelWon=false;
+let floatingHearts=[];
+let fireworks=[];
+
+const groundY=550;
+
+/* ================= START BLOCKS ================= */
+const startBlocks=[
+{x:300,y:500,width:60,height:20},
+{x:380,y:450,width:60,height:20},
+{x:460,y:400,width:60,height:20}
+];
+
+/* ================= WATER PIT ================= */
+const water={x:900,y:550,width:400,height:50};
+
+/* ================= MOVING BLOCKS ================= */
+const movingBlocks=[
+{x:950,y:480,width:120,height:20,dir:1,min:900,max:1200},
+{x:1150,y:440,width:120,height:20,dir:-1,min:1000,max:1300}
+];
+
+/* ================= PIPES ================= */
+const pipes=[
+{x:1500,y:480,width:80,height:70},
+{x:1700,y:480,width:80,height:70}
+];
+
+const crabs=[
+{x:1540,y:460,baseY:460,dir:1},
+{x:1740,y:460,baseY:460,dir:1}
+];
+
+/* ================= BRICK WALL ================= */
+const brickWall=[];
+for(let i=0;i<5;i++){
+brickWall.push({x:2000+i*60,y:490-i*50,width:60,height:60});
+}
+
+/* ================= COINS ================= */
+let coins=[
+{x:320,y:470,collected:false},
+{x:400,y:420,collected:false},
+{x:480,y:370,collected:false},
+{x:1050,y:450,collected:false},
+{x:1250,y:420,collected:false},
+{x:1400,y:520,collected:false},
+{x:1450,y:520,collected:false},
+{x:2030,y:460,collected:false},
+{x:2090,y:410,collected:false},
+{x:2150,y:360,collected:false}
+];
+
+/* ================= BIRDS & BUGS ================= */
+const birds=[
+{x:600,y:200,dx:2},
+{x:1100,y:150,dx:2},
+{x:1800,y:180,dx:2}
+];
+
+const bugs=[
+{x:800,y:520,dx:1},
+{x:2300,y:520,dx:1}
+];
+
+/* ================= PALACE ================= */
+const palace={
+x:2600,
+y:320,
+size:180,
+beat:0
+};
+
+/* ================= COLLISION ================= */
+function collision(a,b){
+return(
+a.x < b.x + b.width &&
+a.x + a.width > b.x &&
+a.y < b.y + b.height &&
+a.y + a.height > b.y
+);
+}
+
+/* ================= FIREWORKS ================= */
+function spawnFirework(){
+fireworks.push({
+x:Math.random()*canvas.width,
+y:Math.random()*canvas.height/2,
+dx:(Math.random()-0.5)*6,
+dy:(Math.random()-0.5)*6,
+life:100
+});
+}
+
+function updateFireworks(){
+fireworks.forEach(f=>{
+f.x+=f.dx;
+f.y+=f.dy;
+f.dy+=0.05;
+f.life--;
+});
+fireworks=fireworks.filter(f=>f.life>0);
+}
+
+/* ================= FLOATING HEARTS ================= */
+function spawnFloatingHeart(){
+floatingHearts.push({
+x:Math.random()*canvas.width,
+y:canvas.height,
+size:10+Math.random()*15,
+speed:1+Math.random(),
+alpha:1
+});
+}
+
+function updateFloatingHearts(){
+floatingHearts.forEach(h=>{
+h.y-=h.speed;
+h.alpha-=0.005;
+});
+floatingHearts=floatingHearts.filter(h=>h.alpha>0);
+}
+
+/* ================= UPDATE ================= */
+function update(){
+
+if(!levelWon){
+
+if(keys["ArrowRight"])player.dx=player.speed;
+else if(keys["ArrowLeft"])player.dx=-player.speed;
+else player.dx=0;
+
+if(keys["Space"]&&player.grounded){
+player.dy=player.jump;
+player.grounded=false;
+}
+
+player.dy+=player.gravity;
+player.x+=player.dx;
+player.y+=player.dy;
+player.grounded=false;
+
+if(player.x>400)worldOffset=player.x-400;
+
+/* Ground */
+if(player.y+player.height>groundY){
+player.y=groundY-player.height;
+player.dy=0;
+player.grounded=true;
+}
+
+/* Blocks */
+startBlocks.forEach(b=>{
+if(collision(player,b)&&player.dy>0){
+player.y=b.y-player.height;
+player.dy=0;
+player.grounded=true;
+}
+});
+
+/* Moving blocks */
+movingBlocks.forEach(b=>{
+b.x+=b.dir*2;
+if(b.x>b.max||b.x<b.min)b.dir*=-1;
+if(collision(player,b)&&player.dy>0){
+player.y=b.y-player.height;
+player.dy=0;
+player.grounded=true;
+}
+});
+
+/* Water death */
+if(player.x+player.width>water.x &&
+player.x<water.x+water.width &&
+player.y+player.height>=water.y){
+player.x=100;
+player.y=450;
+worldOffset=0;
+}
+
+/* Pipes */
+pipes.forEach(p=>{
+if(collision(player,p)&&player.dy>0){
+player.y=p.y-player.height;
+player.dy=0;
+player.grounded=true;
+}
+});
+
+/* Brick wall */
+brickWall.forEach(b=>{
+if(collision(player,b)&&player.dy>0){
+player.y=b.y-player.height;
+player.dy=0;
+player.grounded=true;
+}
+});
+
+/* Coins */
+coins.forEach(c=>{
+if(!c.collected &&
+player.x<c.x+20 &&
+player.x+player.width>c.x &&
+player.y<c.y+20 &&
+player.y+player.height>c.y){
+c.collected=true;
+coinCount++;
+}
+});
+
+/* Palace */
+palace.beat+=0.08;
+if(player.x>palace.x){
+levelWon=true;
+}
+}
+
+/* ✅ FIXED BIRD MOVEMENT */
+birds.forEach(b=>{
+b.x += b.dx;
+if(b.x < 400 || b.x > 3000){
+b.dx *= -1;
+}
+});
+
+/* ✅ FIXED BUG MOVEMENT */
+bugs.forEach(b=>{
+b.x += b.dx;
+if(b.x < 400 || b.x > 3000){
+b.dx *= -1;
+}
+});
+
+/* After win */
+if(levelWon){
+if(Math.random()<0.1)spawnFirework();
+if(Math.random()<0.2)spawnFloatingHeart();
+}
+
+updateFireworks();
+updateFloatingHearts();
+}
+
+/* ================= DRAW ================= */
+function draw(){
+ctx.clearRect(0,0,canvas.width,canvas.height);
+
+if(bgImg.complete){
+ctx.drawImage(bgImg,0,0,canvas.width*1.5,canvas.height*1.5);
+}
+
+ctx.save();
+ctx.translate(-worldOffset,0);
+
+/* Ground */
+ctx.fillStyle="#8B4513";
+ctx.fillRect(0,groundY,6000,50);
+
+/* Water */
+ctx.fillStyle="#00BFFF";
+ctx.fillRect(water.x,water.y,water.width,water.height);
+
+/* Blocks */
+ctx.fillStyle="#A0522D";
+startBlocks.forEach(b=>ctx.fillRect(b.x,b.y,b.width,b.height));
+movingBlocks.forEach(b=>ctx.fillRect(b.x,b.y,b.width,b.height));
+
+/* Pipes */
+ctx.fillStyle="green";
+pipes.forEach(p=>ctx.fillRect(p.x,p.y,p.width,p.height));
+
+/* Brick wall */
+ctx.fillStyle="#B22222";
+brickWall.forEach(b=>ctx.fillRect(b.x,b.y,b.width,b.height));
+
+/* Coins */
+ctx.fillStyle="gold";
+coins.forEach(c=>{
+if(!c.collected){
+ctx.beginPath();
+ctx.arc(c.x,c.y,10,0,Math.PI*2);
+ctx.fill();
+}
+});
+
+/* Birds */
+birds.forEach(b=>ctx.drawImage(birdImg,b.x,b.y,50,40));
+
+/* Bugs */
+bugs.forEach(b=>ctx.drawImage(bugImg,b.x,b.y,40,40));
+
+/* Palace */
+let size=palace.size+Math.sin(palace.beat)*10;
+ctx.fillStyle="hotpink";
+ctx.beginPath();
+ctx.moveTo(palace.x+size/2,palace.y+size);
+ctx.bezierCurveTo(palace.x+size*1.2,palace.y+size*0.6,
+palace.x+size*0.8,palace.y,
+palace.x+size/2,palace.y+size*0.3);
+ctx.bezierCurveTo(palace.x+size*0.2,palace.y,
+palace.x-size*0.2,palace.y+size*0.6,
+palace.x+size/2,palace.y+size);
+ctx.fill();
+
+/* Player */
+ctx.drawImage(playerImg,player.x,player.y,player.width,player.height);
+
+ctx.restore();
+
+/* Fireworks */
+fireworks.forEach(f=>{
+ctx.fillStyle="white";
+ctx.fillRect(f.x,f.y,3,3);
+});
+
+/* Floating Hearts */
+floatingHearts.forEach(h=>{
+ctx.globalAlpha=h.alpha;
+ctx.fillStyle="pink";
+ctx.beginPath();
+ctx.arc(h.x,h.y,h.size,0,Math.PI*2);
+ctx.fill();
+ctx.globalAlpha=1;
+});
+
+/* Big I LOVE YOU */
+if(levelWon){
+ctx.fillStyle="white";
+ctx.font="80px cursive";
+ctx.fillText("I LOVE YOU 💖",canvas.width/2-250,150);
+}
+
+/* HUD */
+ctx.fillStyle="white";
+ctx.font="20px cursive";
+ctx.fillText("Coins: "+coinCount+"/10",20,30);
+}
+
+function loop(){update();draw();requestAnimationFrame(loop);}
+loop();
+</script>
+</body>
+</html>
